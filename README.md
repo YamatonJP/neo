@@ -33,7 +33,8 @@
   設計書の手順を実際に実行 → 受け入れ基準を ✅/❌ で照合
   ── ユーザー承認 ──▶
 [Phase 5: コミット]
-  code-reviewer 最終レビュー → /commit(pre-commit hook でテスト強制)
+  code-reviewer 最終レビュー → 成果物を _archive/<完了日>-<slug>/ に移動
+  → /commit(pre-commit hook でテスト強制)
 ```
 
 補助コマンド:
@@ -192,7 +193,8 @@ run_check "test" npm test
 | `.claude/settings.json` | 権限のベースライン + hook 登録 | 新しいコマンドを許可したいとき(`allow`)、危険な操作を確実に禁止したいとき(`deny`)、hook を追加するとき |
 | `.claude/output-styles/team-dev.md` | 結論先行・パス明示の応答スタイル | 応答が冗長だと感じるメンバーが `/output-style team-dev` で任意適用 |
 | `.worktreeinclude` | worktree 作成時に `.env` 等を持ち込む | 直接は使わない。worktree 隔離での並行作業時に環境変数ファイルが自動コピーされる |
-| `docs/features/<slug>/` | 要件定義書・設計書の置き場(コミットして共有) | 「この機能、なんでこういう仕様なんだっけ?」を調べるとき(議論ログに決定理由が残っている)。レビュー時の根拠として |
+| `docs/features/<slug>/` | 進行中の機能の要件定義書・設計書の置き場(コミットして共有) | 「この機能、なんでこういう仕様なんだっけ?」を調べるとき(議論ログに決定理由が残っている)。レビュー時の根拠として |
+| `docs/features/_archive/<完了日>-<slug>/` | 実装完了済みの成果物(削除せず時系列で保管) | 過去に作った機能の意思決定を遡るとき。完了済みが進行中の一覧に混ざらないよう置き場で分離 |
 
 ## モデル戦略・トークン節約
 

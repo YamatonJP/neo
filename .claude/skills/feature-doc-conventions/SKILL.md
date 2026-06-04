@@ -8,7 +8,7 @@ paths:
 
 # 機能ドキュメントの構成規約
 
-`docs/features/<slug>/` には `/feature` ワークフローの成果物が入る。
+`docs/features/<slug>/` には進行中の `/feature` ワークフローの成果物が入る。**実装完了後は `docs/features/_archive/<実装完了日>-<slug>/` に移される**(削除せず履歴として残す)。
 
 ## requirements.md(要件定義書)
 
