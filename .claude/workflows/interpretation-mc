@@ -1,0 +1,58 @@
+export const meta = {
+  name: 'interpretation-mc',
+  description: '要件定義書を独立したエージェント5体に解釈させ、解釈の分裂箇所=曖昧箇所として実測する(解釈モンテカルロ)',
+  whenToUse: '/feature Phase 1 で要件書ドラフトの曖昧さを承認前に計測するとき。レビュアーの「曖昧そう」という推測ではなく実測値が欲しいとき。',
+  phases: [
+    { title: 'Interpret', detail: '5体が独立に「自分ならこう作る」を記述' },
+    { title: 'Diff', detail: '解釈の一致/分裂を分析して曖昧箇所を特定' },
+  ],
+}
+
+// 使い方: /interpretation-mc docs/features/<slug>/requirements.md
+const docPath = Array.isArray(args) ? args[0] : args
+if (!docPath) throw new Error('要件定義書のパスを渡してください: /interpretation-mc docs/features/<slug>/requirements.md')
+
+const INTERPRETATION = {
+  type: 'object',
+  required: ['summary', 'behaviors', 'edgeCases', 'outOfScope'],
+  properties: {
+    summary: { type: 'string', description: '何を作るかの1段落要約' },
+    behaviors: { type: 'array', items: { type: 'string' }, description: '実装する具体的な挙動のリスト' },
+    edgeCases: { type: 'array', items: { type: 'string' }, description: 'エッジケース(空データ・権限なし・異常入力等)で取るべき挙動の解釈' },
+    outOfScope: { type: 'array', items: { type: 'string' }, description: 'やらないと解釈したこと' },
+  },
+}
+
+const N = 5
+
+phase('Interpret')
+// 各エージェントは互いの解釈を知らない。この独立性が曖昧さ検出の前提
+const interpretations = await parallel(Array.from({ length: N }, (_, i) => () =>
+  agent(
+    `あなたは実装担当エンジニア(視点${i + 1})。要件定義書 ${docPath} だけを読み、` +
+    `誰にも相談せずに「自分ならこう作る」という解釈を書け。` +
+    `要件書に書かれていないことは、書かれている情報から最も自然だと思う解釈で埋めること(その埋め方こそが計測対象)。`,
+    { label: `interpret:${i + 1}`, phase: 'Interpret', schema: INTERPRETATION }
+  )
+))
+
+phase('Diff')
+const valid = interpretations.filter(Boolean)
+log(`${valid.length}/${N} 体の解釈を収集`)
+
+// 全解釈を突き合わせるため、ここはバリア(parallel)後の単一エージェントが正しい
+const report = await agent(
+  `以下は同じ要件定義書 ${docPath} を独立に読んだ ${valid.length} 人のエンジニアの解釈(JSON)。\n` +
+  `解釈を比較し、次の構成の Markdown で報告せよ:\n\n` +
+  `## 一致した解釈(要件が明確な部分)\n` +
+  `## 分裂した解釈(曖昧箇所)\n` +
+  `各分裂箇所について: どう割れたか(N人がA、M人がB)/要件書のどの記述が原因か/ユーザーに確認すべき質問の形。\n` +
+  `## 全員が補完した暗黙の仮定\n` +
+  `要件書に書かれていないのに全員が同じ仮定で埋めた部分(事実上の仕様なので明文化を推奨)。\n` +
+  `## 総評\n` +
+  `1〜2行。承認可能な明確さか、分裂箇所の解消が先かを明言する。\n\n` +
+  JSON.stringify(valid, null, 2),
+  { label: 'diff-report', phase: 'Diff' }
+)
+
+return report

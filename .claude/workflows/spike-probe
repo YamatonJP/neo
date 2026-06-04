@@ -1,0 +1,82 @@
+export const meta = {
+  name: 'spike-probe',
+  description: '設計のリスキーな仮定を worktree 隔離の使い捨て実装で並列検証する(スパイク実証)。設計レビューを意見から実装証拠に変える。',
+  whenToUse: '/feature Phase 2 で設計書の「検証が必要な仮定」を承認前に検証するとき。git リポジトリであることが前提。',
+  phases: [
+    { title: 'Extract', detail: '設計書からリスキーな仮定を抽出(最大3件)' },
+    { title: 'Spike', detail: 'worktree で使い捨て実装を並列試行' },
+  ],
+}
+
+// 使い方: /spike-probe docs/features/<slug>/design.md
+const designPath = Array.isArray(args) ? args[0] : args
+if (!designPath) throw new Error('設計書のパスを渡してください: /spike-probe docs/features/<slug>/design.md')
+
+const ASSUMPTIONS = {
+  type: 'object',
+  required: ['assumptions'],
+  properties: {
+    assumptions: {
+      type: 'array',
+      maxItems: 3,
+      items: {
+        type: 'object',
+        required: ['claim', 'risk', 'probe'],
+        properties: {
+          claim: { type: 'string', description: '実装してみないと真偽が分からない仮定' },
+          risk: { type: 'string', description: '仮定が外れた場合の設計への影響' },
+          probe: { type: 'string', description: 'この仮定を検証する最小の使い捨て実装の内容' },
+        },
+      },
+    },
+  },
+}
+
+phase('Extract')
+const extracted = await agent(
+  `設計書 ${designPath} と、同じディレクトリの requirements.md を読め。` +
+  `設計書に「検証が必要な仮定」セクションがあればそれを優先し、なければ本文から` +
+  `「実装してみないと真偽が分からないリスキーな仮定」(ライブラリの能力、互換性、性能特性など)を抽出せよ。最大3件。` +
+  `読めば分かること・確実に成り立つ自明な仮定は含めない。` +
+  `各仮定に、それを検証する最小の使い捨て実装(プローブ)の内容を添えること。`,
+  { label: 'extract', phase: 'Extract', schema: ASSUMPTIONS }
+)
+
+if (!extracted.assumptions.length) {
+  return '検証が必要なリスキーな仮定は見つからなかった。スパイク不要、設計承認に進んでよい。'
+}
+log(`リスキーな仮定 ${extracted.assumptions.length} 件を抽出`)
+
+phase('Spike')
+const VERDICT = {
+  type: 'object',
+  required: ['verdict', 'evidence', 'learnings'],
+  properties: {
+    verdict: { type: 'string', enum: ['confirmed', 'refuted', 'partial'], description: 'confirmed=実証 / refuted=反証 / partial=条件付き' },
+    evidence: { type: 'string', description: '実際に書いたコード・実行したコマンド・観察した結果の要約' },
+    learnings: { type: 'array', items: { type: 'string' }, description: '設計に反映すべき学び(API の癖、性能の実測値、必要な追加対応など)' },
+  },
+}
+
+// 各スパイクは worktree に隔離(リポジトリの独立コピーで作業し、終了後に破棄される)
+const results = await parallel(extracted.assumptions.map((a, i) => () =>
+  agent(
+    `スパイク(仮定の使い捨て検証)。\n` +
+    `仮定: 「${a.claim}」\n外れた場合のリスク: ${a.risk}\n検証方法の案: ${a.probe}\n\n` +
+    `この仮定を最小の使い捨てコードで実際に検証せよ。きれいさは不要。動かして真偽を確かめることだけが目的。` +
+    `テスト・小スクリプト・既存コードへの仮の変更、何を書いてもよいが、**必ず実行して結果を観察すること**(推測で判定しない)。` +
+    `この作業ディレクトリは隔離された worktree で、コードは報告後に破棄される。結果と学びだけを報告せよ。`,
+    { label: `spike:${i + 1}`, phase: 'Spike', isolation: 'worktree', schema: VERDICT }
+  ).then(v => ({ assumption: a.claim, ...v }))
+))
+
+const done = results.filter(Boolean)
+const refuted = done.filter(r => r.verdict === 'refuted')
+log(`スパイク完了: ${done.length} 件(反証 ${refuted.length} 件)`)
+
+return {
+  summary: refuted.length
+    ? `⚠ ${refuted.length} 件の仮定が反証された。設計の修正が必要。`
+    : 'すべての仮定が実装証拠で確認された(partial があれば条件を設計に反映すること)。',
+  results: done,
+}

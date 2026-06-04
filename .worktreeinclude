@@ -1,0 +1,4 @@
+# 新規 git worktree 作成時にコピーする gitignore 対象ファイル
+# (isolation: worktree のサブエージェントや EnterWorktree で必要)
+.env
+.env.*

@@ -1,0 +1,65 @@
+export const meta = {
+  name: 'req-panel',
+  description: '要件定義書を PM・アーキテクト・QA・セキュリティの4視点で並列レビューし、統合した指摘リストを返す',
+  whenToUse: '大きい機能の要件定義で critic 1体では視点が足りないとき。/feature Phase 1 のエスカレーションとして使う。',
+  phases: [
+    { title: 'Review', detail: '4視点の並列レビュー' },
+    { title: 'Synthesize', detail: '重複統合と優先度付け' },
+  ],
+}
+
+// 使い方: /req-panel docs/features/<slug>/requirements.md
+const docPath = Array.isArray(args) ? args[0] : args
+if (!docPath) throw new Error('要件定義書のパスを渡してください: /req-panel docs/features/<slug>/requirements.md')
+
+const FINDINGS = {
+  type: 'object',
+  required: ['findings'],
+  properties: {
+    findings: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['severity', 'point', 'question'],
+        properties: {
+          severity: { type: 'string', enum: ['critical', 'should', 'consider'] },
+          point: { type: 'string', description: '指摘内容' },
+          question: { type: 'string', description: 'ユーザーに確認すべき質問の形' },
+        },
+      },
+    },
+  },
+}
+
+const PERSPECTIVES = [
+  { key: 'pm', name: 'プロダクトマネージャー', focus: 'ユーザー価値・スコープの妥当性・受け入れ基準の検証可能性・「やらないこと」の明確さ' },
+  { key: 'architect', name: 'アーキテクト', focus: '実現性・既存システムとの整合・データ設計への影響・技術的リスク' },
+  { key: 'qa', name: 'QA エンジニア', focus: 'エッジケース・異常系・テスト容易性・受け入れ基準の網羅性' },
+  { key: 'security', name: 'セキュリティエンジニア', focus: '認可・入力バリデーション・個人情報の扱い・監査ログ' },
+]
+
+phase('Review')
+// 統合フェーズは全視点の結果が揃ってから行うため、ここはバリア(parallel)が正しい
+const reviews = await parallel(PERSPECTIVES.map(p => () =>
+  agent(
+    `あなたは${p.name}。要件定義書 ${docPath} を読み(必要なら既存コードも調査し)、` +
+    `「${p.focus}」の観点で問題点を洗い出せ。指摘ゼロはあり得ない。` +
+    `各指摘には、ユーザーに確認すべき質問の形を必ず添えること。`,
+    { label: `review:${p.key}`, phase: 'Review', schema: FINDINGS }
+  ).then(r => ({ perspective: p.name, findings: r.findings }))
+))
+
+phase('Synthesize')
+const all = reviews.filter(Boolean)
+log(`${all.length}/${PERSPECTIVES.length} 視点のレビューが完了`)
+
+const synthesis = await agent(
+  `以下は要件定義書 ${docPath} に対する多視点レビューの結果(JSON)。\n` +
+  `重複する指摘を統合し、severity 順(critical → should → consider)に並べ、` +
+  `各指摘に「どの視点からの指摘か」と「ユーザーに確認すべき質問」を付けた Markdown のリストとして返せ。\n` +
+  `最後に総評を1〜2行(critical の有無を明言)。\n\n` +
+  JSON.stringify(all, null, 2),
+  { label: 'synthesize', phase: 'Synthesize' }
+)
+
+return synthesis
