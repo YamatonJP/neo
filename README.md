@@ -86,14 +86,17 @@
 
 このテンプレートは**スタック非依存**(言語・フレームワークの固定なし)。プロジェクト固有の情報は **CLAUDE.md と pre-commit.sh の2箇所に集約**してあり、そこだけ書き換えれば動く。
 
-### Step 1. ファイルをコピーする
+### Step 1. テンプレート一式をプロジェクトのルートに配置する
+
+このリポジトリを clone し、**`.git` フォルダを除外した**全ファイルを導入先プロジェクトのルートに配置する(`.git` を持ち込むと自分のプロジェクトの履歴がテンプレートのもので上書きされてしまう):
 
 ```bash
-cp -r <このリポジトリ>/.claude        <あなたのプロジェクト>/
-cp <このリポジトリ>/CLAUDE.md         <あなたのプロジェクト>/
-cp <このリポジトリ>/.worktreeinclude  <あなたのプロジェクト>/
-mkdir -p <あなたのプロジェクト>/docs/features
+git clone https://github.com/YamatonJP/neo.git /tmp/neo
+rm -rf /tmp/neo/.git                       # ← テンプレートの履歴を捨てる
+cp -r /tmp/neo/. <あなたのプロジェクト>/    # .claude/ CLAUDE.md README.md .worktreeinclude docs/ LICENSE が入る
 ```
+
+配置されるもの: `.claude/`(スキル・エージェント・hook・設定一式)、`CLAUDE.md`、`README.md`(後で Step 7 で書き換える)、`.worktreeinclude`、`docs/features/`、`LICENSE`。導入先に既存の `README.md` / `LICENSE` がある場合は上書きに注意。
 
 ### Step 2. CLAUDE.md を書き換える(最重要)
 
@@ -158,7 +161,11 @@ run_check "test" npm test
 3. **小さい機能で `/feature` を一周する**(例: `/feature ヘルスチェック用エンドポイントを追加したい`)。ヒアリング → critic の指摘 → 承認ゲート → 実装 → 動作確認 → コミット、の流れを体感してからチームに展開する
 4. わざとテストを壊した状態でコミット(`git commit`)を試み、hook がブロックすることも確認しておく(`/commit` 経由でも素の `git commit` でも発火する)
 
-### Step 7. コミットしてチームに共有する
+### Step 7. この README を自分のプロジェクト用に書き換える
+
+配置された `README.md` はこのテンプレートの説明文。**自分のプロジェクトの README に書き換える**(プロジェクトの概要・セットアップ・使い方など)。ワークフローの使い方をチームに残したい場合は、「`/feature <依頼内容>` で開発を始める」ことだけ一言書いておけば十分(詳細はテンプレート元リポジトリを参照、で足りる)。
+
+### Step 8. コミットしてチームに共有する
 
 `.claude/` `CLAUDE.md` `.worktreeinclude` `docs/features/` をコミットする。クローンした全員が同じワークフロー・エージェント・強制チェックを共有でき、各メンバーは初回起動時に trust を承認するだけでよい。
 
